@@ -2023,11 +2023,16 @@ defmodule Enum do
   operators work by using this function.
   """
   @spec member?(t, element) :: boolean
-  def member?(enumerable, element) when is_list(enumerable) do
+  def member?(enumerable, element) do
+    __in__(element, enumerable)
+  end
+
+  @doc false
+  def __in__(element, enumerable) when is_list(enumerable) do
     :lists.member(element, enumerable)
   end
 
-  def member?(enumerable, element) do
+  def __in__(element, enumerable) do
     case Enumerable.member?(enumerable, element) do
       {:ok, element} when is_boolean(element) ->
         element

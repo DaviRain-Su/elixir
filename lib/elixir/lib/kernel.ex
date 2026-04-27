@@ -4723,7 +4723,7 @@ defmodule Kernel do
             in_var(in_body?, left, &in_range(&1, expand.(first), expand.(last), expand.(step)))
 
           _ when in_body? ->
-            quote(do: Elixir.Enum.member?(unquote(right), unquote(left)))
+            quote(do: Elixir.Enum.__in__(unquote(left), unquote(right)))
 
           _ ->
             raise_on_invalid_args_in_2(right)
