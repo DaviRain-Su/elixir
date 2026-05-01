@@ -303,7 +303,7 @@ defmodule EEx.Compiler do
       file: file,
       source: source,
       line: line,
-      quoted: [],
+      quoted: %{},
       parser_options: [indentation: indentation] ++ parser_options,
       indentation: indentation
     }
@@ -366,7 +366,7 @@ defmodule EEx.Compiler do
         rest,
         state.engine.handle_begin(buffer),
         [{contents, start_line, start_column} | scope],
-        %{state | quoted: [], line: line}
+        %{state | quoted: %{}, line: line}
       )
 
     if mark == ~c"" and not match?({:=, _, [_, _]}, contents) do
@@ -410,7 +410,7 @@ defmodule EEx.Compiler do
        ) do
     {wrapped, state} = wrap_expr(current, meta.line, buffer, chars, state)
     options = [file: state.file, line: line, column: column] ++ state.parser_options
-    tuples = Code.string_to_quoted!(wrapped, options)
+    tuples = Code.string_to_quoted!(:lists.flatten(wrapped), options)
     buffer = insert_quoted(tuples, state.quoted)
     {buffer, rest}
   end
@@ -426,7 +426,7 @@ defmodule EEx.Compiler do
 
   defp generate_buffer([{:eof, _meta}], _buffer, [{content, line, column} | _scope], state) do
     message = "expected a closing '<% end %>' for block expression in EEx"
-    expr_meta = non_whitespace_meta(content, line, column, state)
+    expr_meta = non_whitespace_meta(:lists.flatten(content), line, column, state)
     syntax_error!(message, expr_meta, state)
   end
 
@@ -443,10 +443,10 @@ defmodule EEx.Compiler do
 
   defp wrap_expr(current, line, buffer, chars, state) do
     new_lines = List.duplicate(?\n, line - state.line)
-    key = length(state.quoted)
-    placeholder = ~c"__EEX__(" ++ Integer.to_charlist(key) ++ ~c");"
-    count = current ++ placeholder ++ new_lines ++ chars
-    new_state = %{state | quoted: [{key, state.engine.handle_end(buffer)} | state.quoted]}
+    key = map_size(state.quoted)
+    placeholder = [~c"__EEX__(", Integer.to_charlist(key), ~c");"]
+    count = [current, placeholder, new_lines, chars]
+    new_state = %{state | quoted: Map.put(state.quoted, key, state.engine.handle_end(buffer))}
 
     {count, new_state}
   end
@@ -479,8 +479,7 @@ defmodule EEx.Compiler do
   # Changes placeholder to real expression
 
   defp insert_quoted({:__EEX__, _, [key]}, quoted) do
-    {^key, value} = List.keyfind(quoted, key, 0)
-    value
+    Map.fetch!(quoted, key)
   end
 
   defp insert_quoted({left, line, right}, quoted) do
