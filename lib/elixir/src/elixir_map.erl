@@ -126,7 +126,7 @@ validate_struct(Atom, _) when is_atom(Atom) -> true;
 validate_struct(_, _) -> false.
 
 assert_struct_info_if_not_function(Meta, Name, Assocs, #{function := nil} = E) ->
-  case maybe_load_struct_info(Meta, Name, E) of
+  case maybe_load_struct_info(Meta, Name, hard, E) of
     {ok, Info} ->
       [lists:any(fun(Field) -> ?key(Field, field) =:= Key end, Info) orelse
          function_error(Meta, E, ?MODULE, {unknown_key_for_struct, Name, Key})
@@ -140,12 +140,24 @@ assert_struct_info_if_not_function(_Meta, _Name, _Assocs, _E) ->
   ok.
 
 maybe_load_struct_info(Meta, Name, E) ->
+  maybe_load_struct_info(Meta, Name, soft, E).
+
+maybe_load_struct_info(Meta, Name, Mode, E) ->
   try
-    case is_open(Name, Meta, E) andalso lookup_struct_info_from_data_tables(Name) of
+    InContext = in_context(Name, E),
+
+    case (InContext orelse is_compiling_struct(Meta, Name, Mode, E))
+           andalso lookup_struct_info_from_data_tables(Name) of
       %% If I am accessing myself and there is no attribute,
       %% don't invoke the fallback to avoid calling loaded code.
       false when ?key(E, module) =:= Name -> nil;
-      false -> Name:'__info__'(struct);
+      false ->
+        %% We already attempted to wait for the struct (unless InContext),
+        %% so we only invoke '__info__' if already loaded or InContext
+        case InContext orelse erlang:module_loaded(Name) of
+          true -> Name:'__info__'(struct);
+          false -> nil
+        end;
       InfoList -> InfoList
     end
   of
@@ -165,7 +177,8 @@ lookup_struct_info_from_data_tables(Module) ->
 
 load_struct(Meta, Name, Assocs, E) ->
   try
-    case is_open(Name, Meta, E) andalso elixir_def:external_for(Meta, Name, '__struct__', 1, [def]) of
+    case (in_context(Name, E) orelse is_compiling_struct(Meta, Name, hard, E)) andalso
+           elixir_def:external_for(Meta, Name, '__struct__', 1, [def]) of
       %% If I am accessing myself and there is no __struct__ function,
       %% don't invoke the fallback to avoid calling loaded code.
       false when ?key(E, module) =:= Name ->
@@ -221,17 +234,17 @@ assert_and_trace_struct_assocs(Meta, Name, Assocs, E) ->
   elixir_env:trace({struct_expansion, Meta, Name, Keys}, E),
   Keys.
 
-is_open(Name, Meta, E) ->
-  in_context(Name, E) orelse ((code:ensure_loaded(Name) /= {module, Name}) andalso wait_for_struct(Name, Meta, E)).
+is_compiling_struct(Meta, Name, Mode, E) ->
+  (code:ensure_loaded(Name) /= {module, Name}) andalso wait_for_struct(Meta, Name, Mode, E).
 
 in_context(Name, E) ->
   %% We also include the current module because it won't be present
   %% in context module in case the module name is defined dynamically.
   lists:member(Name, [?key(E, module) | ?key(E, context_modules)]).
 
-wait_for_struct(Module, Meta, E) ->
+wait_for_struct(Meta, Module, Mode, E) ->
   (erlang:get(elixir_compiler_info) /= undefined) andalso
-    ('Elixir.Kernel.ErrorHandler':ensure_compiled(Module, struct, hard, elixir_utils:get_line(Meta, E)) =:= found).
+    ('Elixir.Kernel.ErrorHandler':ensure_compiled(Module, struct, Mode, elixir_utils:get_line(Meta, E)) =:= found).
 
 struct_undef(Name, E) ->
   case in_context(Name, E) andalso (?key(E, function) == nil) of
