@@ -1812,7 +1812,7 @@ defmodule Module.Types.ExprTest do
                atom([:non_empty_map, :maybe_empty_map])
     end
 
-    test "computes types from dead branches (conditional)" do
+    test "refine types when there are dead branches (conditional)" do
       assert typecheck!(
                [x],
                (
@@ -1835,6 +1835,17 @@ defmodule Module.Types.ExprTest do
                )
              ) == dynamic(negation(atom([:foo])))
 
+      assert typecheck!(
+               [x],
+               (
+                 if is_map(x) or is_integer(x) do
+                   raise "bad"
+                 end
+
+                 x
+               )
+             ) == dynamic(negation(union(open_map(), integer())))
+
       # When it is not precise enough, we don't filter
       assert typecheck!(
                [x],
@@ -1848,7 +1859,7 @@ defmodule Module.Types.ExprTest do
              ) == dynamic()
     end
 
-    test "computes types from dead branches (case)" do
+    test "refine types when there are branches (case)" do
       assert typecheck!(
                [x, key],
                (
