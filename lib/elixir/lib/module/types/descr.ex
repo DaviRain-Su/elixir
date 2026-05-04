@@ -5851,6 +5851,8 @@ defmodule Module.Types.Descr do
     end
   end
 
+  def bdd_difference(bdd, bdd), do: :bdd_bot
+
   def bdd_difference(bdd1, bdd2) do
     case {bdd1, bdd2} do
       {_bdd, :bdd_top} ->
