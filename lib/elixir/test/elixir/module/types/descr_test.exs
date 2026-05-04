@@ -650,7 +650,7 @@ defmodule Module.Types.DescrTest do
                closed_map(__struct__: difference(atom(), atom_bar))
 
       # Explicitly assert we keep it as cascading differences
-      assert %{map: {{:closed, _}, :bdd_bot, :bdd_bot, _}} =
+      assert %{map: {_, {_, :closed, _}, :bdd_bot, :bdd_bot, _}} =
                difference(
                  difference(
                    open_map(value: term()),
@@ -3104,19 +3104,19 @@ defmodule Module.Types.DescrTest do
       assert fun([integer()], boolean())
              |> union(fun([float()], boolean()))
              |> to_quoted_string() ==
-               "(integer() -> boolean()) or (float() -> boolean())"
+               "(float() -> boolean()) or (integer() -> boolean())"
 
       assert fun([integer()], boolean())
              |> intersection(fun([float()], boolean()))
              |> to_quoted_string() ==
-               "(integer() -> boolean()) and (float() -> boolean())"
+               "(float() -> boolean()) and (integer() -> boolean())"
 
       # Thanks to lazy BDDs, consecutive union of functions come out as the original union
       assert fun([integer()], integer())
              |> union(fun([float()], float()))
              |> union(fun([pid()], pid()))
              |> to_quoted_string() ==
-               "(integer() -> integer()) or (float() -> float()) or (pid() -> pid())"
+               "(integer() -> integer()) or (pid() -> pid()) or (float() -> float())"
 
       assert fun(3) |> to_quoted_string() == "(none(), none(), none() -> term())"
 
@@ -3159,14 +3159,14 @@ defmodule Module.Types.DescrTest do
 
       assert union(domain_part, codomain_part) |> to_quoted_string() ==
                """
-               (dynamic(atom()) or integer(), binary() -> float()) or
-                 (pid(), float() -> dynamic(atom()) or integer())\
+               (pid(), float() -> dynamic(atom()) or integer()) or
+                 (dynamic(atom()) or integer(), binary() -> float())\
                """
 
       assert intersection(domain_part, codomain_part) |> to_quoted_string() ==
                """
-               (dynamic(atom()) or integer(), binary() -> float()) and
-                 (pid(), float() -> dynamic(atom()) or integer())\
+               (pid(), float() -> dynamic(atom()) or integer()) and
+                 (dynamic(atom()) or integer(), binary() -> float())\
                """
     end
 
