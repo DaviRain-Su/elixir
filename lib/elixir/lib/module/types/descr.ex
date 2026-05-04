@@ -48,10 +48,10 @@ defmodule Module.Types.Descr do
   # Remark: those are explicit BDD constructors. The functional constructors are `bdd_new/1` and `bdd_new/3`.
   @fun_top {:negation, %{}}
   @atom_top {:negation, :sets.new(version: 2)}
-  @map_top {:erlang.phash2({:open, @fields_new}), :open, @fields_new}
-  @non_empty_list_top {:erlang.phash2({:term, :term}), :term, :term}
-  @tuple_top {:erlang.phash2({:open, []}), :open, []}
-  @map_empty {:erlang.phash2({:closed, @fields_new}), :closed, @fields_new}
+  @map_top {:erlang.phash2([:open | @fields_new]), :open, @fields_new}
+  @non_empty_list_top {:erlang.phash2([:term | :term]), :term, :term}
+  @tuple_top {:erlang.phash2([:open | []]), :open, []}
+  @map_empty {-:erlang.phash2(@fields_new), :closed, @fields_new}
 
   defmacrop bdd_leaf(arg1, arg2) do
     quote do
@@ -441,7 +441,7 @@ defmodule Module.Types.Descr do
   defp union(:atom, v1, v2), do: atom_union(v1, v2)
   defp union(:bitmap, v1, v2), do: v1 ||| v2
   defp union(:dynamic, v1, v2), do: dynamic_union(v1, v2)
-  defp union(:list, v1, v2), do: list_union(v1, v2)
+  defp union(:list, v1, v2), do: bdd_union(v1, v2)
   defp union(:map, v1, v2), do: map_union(v1, v2)
   defp union(:optional, 1, 1), do: 1
   defp union(:tuple, v1, v2), do: tuple_union(v1, v2)
@@ -2243,9 +2243,6 @@ defmodule Module.Types.Descr do
   defp list_tail_unfold(:term), do: @not_non_empty_list
   defp list_tail_unfold(other), do: Map.delete(other, :list)
 
-  @compile {:inline, list_union: 2}
-  defp list_union(bdd1, bdd2), do: bdd_union(bdd1, bdd2)
-
   defp list_top?(bdd_leaf(:term, :term)), do: true
   defp list_top?(_), do: false
 
@@ -3052,8 +3049,8 @@ defmodule Module.Types.Descr do
     end
   end
 
-  defp map_intersection(bdd_leaf(:open, []), bdd), do: bdd
-  defp map_intersection(bdd, bdd_leaf(:open, [])), do: bdd
+  defp map_intersection(bdd_leaf(:open, fields), bdd) when is_fields_empty(fields), do: bdd
+  defp map_intersection(bdd, bdd_leaf(:open, fields)) when is_fields_empty(fields), do: bdd
   defp map_intersection(bdd1, bdd2), do: bdd_intersection(bdd1, bdd2, &map_leaf_intersection/2)
 
   defp map_leaf_intersection(bdd_leaf(tag1, fields1), bdd_leaf(tag2, fields2)) do
@@ -3065,11 +3062,12 @@ defmodule Module.Types.Descr do
     end
   end
 
-  defp map_difference(_, bdd_leaf(:open, [])),
+  defp map_difference(_, bdd_leaf(:open, fields)) when is_fields_empty(fields),
     do: :bdd_bot
 
-  defp map_difference(bdd_leaf(:open, []), {_, _, _, _, _} = bdd2),
-    do: bdd_negation(bdd2)
+  defp map_difference(bdd_leaf(:open, fields), {_, _, _, _, _} = bdd2)
+       when is_fields_empty(fields),
+       do: bdd_negation(bdd2)
 
   defp map_difference(bdd1, bdd2),
     do: bdd_difference(bdd1, bdd2, &map_leaf_difference/3)
@@ -5217,7 +5215,6 @@ defmodule Module.Types.Descr do
     end
   end
 
-  @compile {:inline, tuple_union: 2}
   defp tuple_union(bdd1, bdd2), do: bdd_union(bdd1, bdd2)
 
   defp maybe_optimize_tuple_union({tag1, pos1} = tuple1, {tag2, pos2} = tuple2) do
@@ -5782,7 +5779,10 @@ defmodule Module.Types.Descr do
 
   ## BDD helpers
 
-  defp bdd_leaf_new(arg1, arg2), do: {:erlang.phash2({arg1, arg2}), arg1, arg2}
+  # Some of our operations rely on eliminating closed tuples/maps,
+  # so we make sure they always come first.
+  defp bdd_leaf_new(:closed, arg2), do: {-:erlang.phash2(arg2), :closed, arg2}
+  defp bdd_leaf_new(arg1, arg2), do: {:erlang.phash2([arg1 | arg2]), arg1, arg2}
 
   defp bdd_node_new(lit, c, u, d),
     do: {bdd_compute_hash(lit, c, u, d), lit, c, u, d}
