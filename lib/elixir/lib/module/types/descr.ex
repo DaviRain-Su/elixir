@@ -48,10 +48,10 @@ defmodule Module.Types.Descr do
   # Remark: those are explicit BDD constructors. The functional constructors are `bdd_new/1` and `bdd_new/3`.
   @fun_top {:negation, %{}}
   @atom_top {:negation, :sets.new(version: 2)}
-  @map_top {:erlang.phash2([:open | @fields_new]), :open, @fields_new}
-  @non_empty_list_top {:erlang.phash2([:term | :term]), :term, :term}
-  @tuple_top {:erlang.phash2([:open | []]), :open, []}
-  @map_empty {:erlang.phash2([:closed | @fields_new]), :closed, @fields_new}
+  @map_top {:erlang.phash2({:open, @fields_new}), :open, @fields_new}
+  @non_empty_list_top {:erlang.phash2({:term, :term}), :term, :term}
+  @tuple_top {:erlang.phash2({:open, []}), :open, []}
+  @map_empty {:erlang.phash2({:closed, @fields_new}), :closed, @fields_new}
 
   defmacrop bdd_leaf(arg1, arg2) do
     quote do
@@ -5782,7 +5782,7 @@ defmodule Module.Types.Descr do
 
   ## BDD helpers
 
-  defp bdd_leaf_new(arg1, arg2), do: {:erlang.phash2([arg1 | arg2]), arg1, arg2}
+  defp bdd_leaf_new(arg1, arg2), do: {:erlang.phash2({arg1, arg2}), arg1, arg2}
 
   defp bdd_node_new(lit, c, u, d),
     do: {bdd_compute_hash(lit, c, u, d), lit, c, u, d}
