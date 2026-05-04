@@ -1812,6 +1812,30 @@ defmodule Module.Types.ExprTest do
                atom([:non_empty_map, :maybe_empty_map])
     end
 
+    test "consider external variables as not precise" do
+      assert typecheck!(
+               [x],
+               (
+                 res =
+                   case System.get_env("foo") do
+                     nil when x == :foo -> {:first, x}
+                     rest -> {:second, rest}
+                   end
+
+                 {x, res}
+               )
+             ) ==
+               dynamic(
+                 tuple([
+                   term(),
+                   union(
+                     tuple([atom([:first]), atom([:foo])]),
+                     tuple([atom([:second]), union(binary(), atom([nil]))])
+                   )
+                 ])
+               )
+    end
+
     test "refine types when there are dead branches (conditional)" do
       assert typecheck!(
                [x],

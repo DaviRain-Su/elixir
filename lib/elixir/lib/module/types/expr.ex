@@ -319,14 +319,15 @@ defmodule Module.Types.Expr do
     end)
   end
 
-  def of_expr({:case, meta, [case_expr, [{:do, _clauses}]]}, expected, _expr, stack, context)
+  def of_expr({:case, meta, [case_expr, [do: _clauses]]}, expected, _expr, stack, context)
       when stack.reverse_arrow == :use do
     version = Keyword.fetch!(meta, :version)
     clauses = Map.fetch!(context.reverse_arrows, version)
+    original = context
 
     context =
       clauses
-      |> Enum.reduce({0, []}, fn {_arg_type, body_type, _body} = triplet, {counter, acc} ->
+      |> Enum.reduce({0, []}, fn {_arg_type, body_type, _clause} = triplet, {counter, acc} ->
         if disjoint?(body_type, expected) do
           {counter + 1, acc}
         else
@@ -338,27 +339,33 @@ defmodule Module.Types.Expr do
         {0, _} ->
           context
 
+        # If there is a single clause, we assume it is always evaluated
+        # by doing reverse arrows and incorporting all variables into the context.
+        # We have to evaluate the head again but it might have been preferred
+        # if we could somehow merge a previously computed context.
+        {_, [{arg_type, _body_type, {:->, meta, [head, body]}}]} ->
+          {case_type, context} = of_expr(case_expr, arg_type, case_expr, stack, context)
+
+          {patterns, guards} = extract_head(head)
+          previous = Pattern.init_previous()
+          info = {{:case, meta, case_expr, case_type}, head}
+
+          {_, _, _, _, context} =
+            Pattern.of_head(patterns, guards, [case_type], previous, info, meta, stack, context)
+
+          {_, context} = of_expr(body, expected, body, stack, context)
+          reset_warnings(context, original)
+
         {_, filtered} ->
-          {case_expected, refined_context} =
-            case filtered do
-              [{arg_type, _body_type, body}] ->
-                {_body, context} = of_expr(body, expected, body, stack, context)
-                {arg_type, context}
-
-              _ ->
-                {Enum.reduce(filtered, none(), &union(elem(&1, 0), &2)), context}
-            end
-
-          {_, refined_context} =
-            of_expr(case_expr, case_expected, case_expr, stack, refined_context)
-
-          reset_warnings(refined_context, context)
+          case_expected = Enum.reduce(filtered, none(), &union(elem(&1, 0), &2))
+          {_, context} = of_expr(case_expr, case_expected, case_expr, stack, context)
+          reset_warnings(context, original)
       end
 
     {expected, context}
   end
 
-  def of_expr({:case, meta, [case_expr, [{:do, clauses}]]}, expected, _expr, stack, base_context) do
+  def of_expr({:case, meta, [case_expr, [do: clauses]]}, expected, _expr, stack, base_context) do
     {case_type, context} =
       of_expr(case_expr, term(), case_expr, %{stack | reverse_arrow: :cache}, base_context)
 
@@ -386,7 +393,7 @@ defmodule Module.Types.Expr do
 
       {{none?, body_acc, clauses_acc}, context} =
         of_clauses_fun(clauses, [case_type], info, stack, context, acc, fn
-          trees, precise?, body, context, acc ->
+          trees, precise?, {:->, _, [_, body]} = clause, context, acc ->
             # Compute the arg type based on the clause itself
             [arg_type] = Pattern.of_domain(trees, stack, context)
 
@@ -404,7 +411,7 @@ defmodule Module.Types.Expr do
               {{true, body_acc, clauses_acc}, context}
             else
               [arg_type] = Pattern.of_domain(trees, stack, context)
-              clauses_acc = [{arg_type, body_type, body} | clauses_acc]
+              clauses_acc = [{arg_type, body_type, clause} | clauses_acc]
               {{none?, union(body_type, body_acc), clauses_acc}, context}
             end
         end)
@@ -435,7 +442,7 @@ defmodule Module.Types.Expr do
 
       {acc, context} =
         of_clauses_fun(clauses, domain, :fn, stack, context, [], fn
-          trees, _precise?, body, context, acc ->
+          trees, _precise?, {:->, _, [_, body]}, context, acc ->
             {body_type, context} = of_expr(body, term(), body, stack, context)
             args_types = Pattern.of_domain(trees, stack, context)
             {add_inferred(acc, args_types, body_type), context}
@@ -882,7 +889,7 @@ defmodule Module.Types.Expr do
   end
 
   defp of_clauses(clauses, domain, expected, base_info, stack, context, acc) do
-    of_acc = fn _args_types, _precise?, body, context, acc ->
+    of_acc = fn _args_types, _precise?, {:->, _, [_, body]}, context, acc ->
       {body_type, context} = of_expr(body, expected, body, stack, context)
       {union(acc, body_type), context}
     end
@@ -895,7 +902,7 @@ defmodule Module.Types.Expr do
 
     {result, _previous, context} =
       Enum.reduce(clauses, {acc, Pattern.init_previous(), original}, fn
-        {:->, meta, [head, body]}, {acc, previous, context} ->
+        {:->, meta, [head, _]} = clause, {acc, previous, context} ->
           {failed?, context} = reset_failed(context, failed?)
           {patterns, guards} = extract_head(head)
           info = {base_info, head}
@@ -903,7 +910,7 @@ defmodule Module.Types.Expr do
           {trees, precise?, _, previous, context} =
             Pattern.of_head(patterns, guards, domain, previous, info, meta, stack, context)
 
-          {acc, context} = of_acc.(trees, precise?, body, context, acc)
+          {acc, context} = of_acc.(trees, precise?, clause, context, acc)
           {acc, previous, context |> set_failed(failed?) |> Of.reset_vars(original)}
       end)
 
