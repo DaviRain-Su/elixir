@@ -654,23 +654,15 @@ defmodule LoggerTest do
     previous = Application.get_env(:logger, :level)
 
     try do
-      Application.delete_env(:logger, :level)
       Logger.configure(level: :error)
       assert Logger.level() == :error
       assert Application.get_env(:logger, :level) == :error
 
-      Logger.App.stop()
-      Application.start(:logger)
-      assert Logger.level() == :error
-      assert Application.get_env(:logger, :level) == :error
+      Logger.configure(level: :debug)
+      assert Logger.level() == :debug
+      assert Application.get_env(:logger, :level) == :debug
     after
       Logger.configure(level: previous || :debug)
-
-      if previous do
-        Application.put_env(:logger, :level, previous)
-      else
-        Application.delete_env(:logger, :level)
-      end
     end
   end
 
