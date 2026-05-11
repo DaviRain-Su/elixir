@@ -2656,7 +2656,61 @@ defmodule Module.Types.ExprTest do
                 """}
     end
 
-    test "refines types" do
+    test "refines types (2 clauses)" do
+      assert typecheck!(
+               [x],
+               cond do
+                 is_binary(x) -> {:first, x}
+                 true -> {:second, x}
+               end
+             ) ==
+               dynamic(
+                 union(
+                   tuple([atom([:first]), binary()]),
+                   tuple([atom([:second]), negation(binary())])
+                 )
+               )
+
+      # Negated types do not leak through
+      assert typecheck!(
+               [x],
+               (
+                 cond do
+                   is_binary(x) -> {:first, x}
+                   true -> {:second, x}
+                 end
+
+                 x
+               )
+             ) == dynamic()
+
+      # Unless one of them raise
+      assert typecheck!(
+               [x],
+               (
+                 cond do
+                   is_binary(x) -> raise "oops"
+                   true -> :ok
+                 end
+
+                 x
+               )
+             ) == dynamic(negation(binary()))
+
+      assert typecheck!(
+               [x],
+               (
+                 cond do
+                   is_binary(x) -> :ok
+                   true -> raise "oops"
+                 end
+
+                 x
+               )
+             ) == dynamic(binary())
+    end
+
+    test "refines types (3+ clauses)" do
       assert typecheck!(
                [x],
                cond do

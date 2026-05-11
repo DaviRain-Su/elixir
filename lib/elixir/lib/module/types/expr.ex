@@ -286,6 +286,66 @@ defmodule Module.Types.Expr do
     of_expr(post, expected, post, stack, context)
   end
 
+  def of_expr(
+        {:cond, meta,
+         [
+           [
+             {:do,
+              [
+                {:->, pos_meta, [[pos_head], pos_body]},
+                {:->, _neg_meta, [[neg_head], neg_body]}
+              ]}
+           ]
+         ]},
+        expected,
+        expr,
+        stack,
+        acc_context
+      )
+      when is_atom(neg_head) and neg_head not in [false, nil] do
+    cache_result(meta, stack, acc_context, fn ->
+      {pos_head_type, context} =
+        of_expr(pos_head, term(), pos_head, %{stack | reverse_arrow: :cache}, acc_context)
+
+      # Reset the context vars, keep warnings, as we will infer with expected truthy
+      context = Of.reset_vars(context, acc_context)
+
+      context =
+        maybe_always_or_never_match_cond(pos_head_type, pos_head, pos_meta, stack, context, false)
+
+      {_, truthy_context} =
+        of_expr(pos_head, @truthy, pos_head, %{stack | reverse_arrow: :use}, context)
+
+      # Keep the context except the warnings, and compute the body
+      context = reset_warnings(truthy_context, context)
+
+      {pos_body_type, context} =
+        of_expr(pos_body, expected, expr, stack, context)
+
+      # Reset the context vars once again to compute the falsy type
+      context = Of.reset_vars(context, acc_context)
+
+      {_, falsy_context} =
+        of_expr(pos_head, @falsy, pos_head, %{stack | reverse_arrow: :use}, context)
+
+      context = reset_warnings(falsy_context, context)
+
+      {neg_body_type, context} =
+        of_expr(neg_body, expected, expr, stack, context)
+
+      body_type = union(pos_body_type, neg_body_type)
+
+      context =
+        cond do
+          empty?(pos_body_type) -> Of.reset_vars(context, falsy_context)
+          empty?(neg_body_type) -> Of.reset_vars(context, truthy_context)
+          true -> Of.reset_vars(context, acc_context)
+        end
+
+      dynamic_unless_static({body_type, context}, stack)
+    end)
+  end
+
   def of_expr({:cond, meta, [[{:do, clauses}]]}, expected, expr, stack, context) do
     cache_result(meta, stack, context, fn ->
       {body_type, acc_context} =
@@ -298,22 +358,7 @@ defmodule Module.Types.Expr do
             context = Of.reset_vars(context, acc_context)
 
             context =
-              if is_warning(stack) do
-                case truthiness(head_type) do
-                  :always_true when not last? ->
-                    warning = {:badcond, "always match", head_type, head, context}
-                    warn(__MODULE__, warning, meta, stack, context)
-
-                  :always_false ->
-                    warning = {:badcond, "never match", head_type, head, context}
-                    warn(__MODULE__, warning, meta, stack, context)
-
-                  _ ->
-                    context
-                end
-              else
-                context
-              end
+              maybe_always_or_never_match_cond(head_type, head, meta, stack, context, last?)
 
             {_, truthy_context} =
               of_expr(head, @truthy, head, %{stack | reverse_arrow: :use}, context)
@@ -327,10 +372,17 @@ defmodule Module.Types.Expr do
             # Reset the context vars once again to compute the falsy type
             context = Of.reset_vars(context, acc_context)
 
-            {_, falsy_context} =
-              of_expr(head, @falsy, head, %{stack | reverse_arrow: :use}, context)
+            context =
+              if last? do
+                context
+              else
+                {_, falsy_context} =
+                  of_expr(head, @falsy, head, %{stack | reverse_arrow: :use}, context)
 
-            {union(body_type, acc), reset_warnings(falsy_context, context)}
+                reset_warnings(falsy_context, context)
+              end
+
+            {union(body_type, acc), context}
         end)
 
       dynamic_unless_static({body_type, Of.reset_vars(acc_context, context)}, stack)
@@ -380,7 +432,7 @@ defmodule Module.Types.Expr do
           reset_warnings(context, original)
       end
 
-    {expected, context}
+    dynamic_unless_static({expected, context}, stack)
   end
 
   def of_expr({:case, meta, [case_expr, [do: clauses]]}, expected, _expr, stack, base_context) do
@@ -873,6 +925,25 @@ defmodule Module.Types.Expr do
 
   defp reduce_non_empty([head | tail], acc, fun),
     do: reduce_non_empty(tail, fun.(head, acc, false), fun)
+
+  defp maybe_always_or_never_match_cond(head_type, head, meta, stack, context, last?) do
+    if is_warning(stack) do
+      case truthiness(head_type) do
+        :always_true when not last? ->
+          warning = {:badcond, "always match", head_type, head, context}
+          warn(__MODULE__, warning, meta, stack, context)
+
+        :always_false ->
+          warning = {:badcond, "never match", head_type, head, context}
+          warn(__MODULE__, warning, meta, stack, context)
+
+        _ ->
+          context
+      end
+    else
+      context
+    end
+  end
 
   defp dynamic_unless_static({_, _} = output, %{mode: :static}), do: output
   defp dynamic_unless_static({type, context}, %{mode: _}), do: {dynamic(type), context}
