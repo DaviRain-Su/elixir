@@ -773,6 +773,13 @@ defmodule Module.Types.PatternTest do
 
       assert typecheck!([x, y], is_binary(x) when is_atom(y), {x, y}) ==
                dynamic(tuple([term(), term()]))
+
+      # with annotated hd/tl
+      assert typecheck!([x], is_binary(x) when is_atom(hd(x)), x) ==
+               dynamic(union(binary(), non_empty_list(term(), term())))
+
+      assert typecheck!([x], is_binary(hd(x)) when is_atom(hd(x)), x) ==
+               dynamic(non_empty_list(term(), term()))
     end
 
     test "conditional checks (andalso/orelse)" do

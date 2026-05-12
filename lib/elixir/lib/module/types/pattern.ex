@@ -413,8 +413,10 @@ defmodule Module.Types.Pattern do
 
   defp match_var do
     version = make_ref()
-    {version, {:match, [version: version], __MODULE__}}
+    {version, match_var(version)}
   end
+
+  defp match_var(version), do: {:match, [version: version], __MODULE__}
 
   defp match_error?({:match, _, __MODULE__}, _type), do: true
   defp match_error?(_var, type), do: empty?(type)
@@ -1021,8 +1023,8 @@ defmodule Module.Types.Pattern do
         guard_context: :andalso,
         parent_version: nil,
         vars: vars,
-        changed: %{},
-        subpatterns: %{}
+        subpatterns_vars: %{},
+        changed: %{}
       })
 
     {precise?, context} = of_guards(guards, stack, context)
@@ -1047,7 +1049,12 @@ defmodule Module.Types.Pattern do
       end)
 
     expr = Enum.reduce(guards, {:_, [], []}, &{:when, [], [&2, &1]})
-    context = %{context | vars: vars, conditional_vars: conditional_vars}
+
+    context = %{
+      context
+      | vars: Map.merge(vars, context.pattern_info.subpatterns_vars),
+        conditional_vars: conditional_vars
+    }
 
     {precise? and Of.all_same_conditional_vars?(vars_conds),
      Of.reduce_conditional_vars(vars_conds, expr, stack, context)}
@@ -1068,7 +1075,7 @@ defmodule Module.Types.Pattern do
         {false, context}
 
       {true, maybe_or_always} ->
-        {maybe_or_always == :always and context.pattern_info.subpatterns == %{}, context}
+        {maybe_or_always == :always, context}
 
       _false_tuple_or_none ->
         error = {:badguard, type, guard, context}
@@ -1327,7 +1334,7 @@ defmodule Module.Types.Pattern do
          call,
          expected,
          stack,
-         %{pattern_info: %{subpatterns: subpatterns}} = context
+         context
        )
        when fun in [:hd, :tl] do
     arg_key =
@@ -1338,18 +1345,38 @@ defmodule Module.Types.Pattern do
 
     subpattern_key = {fun, arg_key}
 
-    {var, context} =
-      case subpatterns do
-        %{^subpattern_key => var} ->
-          {var, context}
+    {found?, var_version, context} =
+      case context.subpatterns do
+        %{^subpattern_key => var_version} ->
+          case context.vars do
+            %{^var_version => _} -> {true, var_version, context}
+            %{} -> {false, var_version, context}
+          end
 
         %{} ->
-          {type, context} =
-            Apply.remote(:erlang, fun, [arg], expected, call, stack, context, &of_guard/5)
+          var_version = make_ref()
+          {false, var_version, put_in(context.subpatterns[subpattern_key], var_version)}
+      end
 
-          {_, var} = match_var()
-          context = Of.declare_var(var, type, context)
-          {var, put_in(context.pattern_info.subpatterns[subpattern_key], var)}
+    var = match_var(var_version)
+
+    context =
+      if found? do
+        context
+      else
+        {type, context} =
+          Apply.remote(:erlang, fun, [arg], expected, call, stack, context, &of_guard/5)
+
+        context = Of.declare_var(var, type, context)
+
+        update_in(context.pattern_info, fn %{subpatterns_vars: subpatterns_vars} = pattern_info ->
+          %{
+            pattern_info
+            | vars: false,
+              subpatterns_vars:
+                Map.put(subpatterns_vars, var_version, Map.fetch!(context.vars, var_version))
+          }
+        end)
       end
 
     of_guard(var, expected, call, stack, context)
