@@ -235,7 +235,7 @@ On the other hand, type inference offers the benefit of enabling type checking f
 
 Type inference in Elixir is best-effort: it doesn't guarantee it will find all possible type incompatibilities, only that it may find bugs where all combinations of a type _will_ fail, even in the absence of explicit type annotations. It is meant to be an efficient routine that brings developers some benefits of static typing, without requiring any effort from them and keeping the expressiveness of the language.
 
-In the long term, Elixir developers who want static typing guarantees must explicitly add type signatures to their functions (see "Roadmap"). Any function with an explicit type signature will be typed checked against the user-provided annotations, as in other statically typed languages. 
+In the long term, Elixir developers who want static typing guarantees must explicitly add type signatures to their functions (see "Roadmap"). Any function with an explicit type signature will be typed checked against the user-provided annotations, as in other statically typed languages.
 
 ### False positives during inference
 

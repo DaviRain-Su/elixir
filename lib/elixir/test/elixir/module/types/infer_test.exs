@@ -283,4 +283,33 @@ defmodule Module.Types.InferTest do
              {[atom([:error])], dynamic(tuple([atom([:error]), term()]))}
            ]
   end
+
+  test "from defaults (regression with multiple clauses)", config do
+    types =
+      infer config do
+        def entries(tree_node, opts \\ [keep_text: true])
+
+        def entries({_, _, subentries}, keep_text: false) do
+          Enum.filter(subentries, &is_tuple/1)
+        end
+
+        def entries({_, _, subentries}, keep_text: _) do
+          subentries
+        end
+
+        def entries({_, _, _} = tree_node, opts) do
+          opts = Keyword.validate!(opts, keep_text: true)
+          entries(tree_node, keep_text: opts[:keep_text])
+        end
+
+        def entries(_tree_node, _opts), do: nil
+      end
+
+    {:infer, _, signature} = types[{:entries, 1}]
+
+    assert signature == [
+             {[tuple([term(), term(), term()])], dynamic()},
+             {[negation(tuple([term(), term(), term()]))], atom([nil])}
+           ]
+  end
 end

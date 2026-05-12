@@ -360,9 +360,9 @@ defmodule Module.Types do
         Apply.local_arrows(call_fun, call_args, term, body, stack, head_context, of_fun)
 
       # For each arrow, compute the default arrow
-      {_, mapping, inferred} =
-        Enum.reduce(arrows, {0, [], []}, fn
-          {clause_domain, return_type}, {index, mapping, inferred} ->
+      {_, _, mapping, inferred} =
+        Enum.reduce(arrows, {0, 0, [], []}, fn
+          {clause_domain, return_type}, {index, total, mapping, inferred} ->
             of_fun = &Expr.of_expr(&1, &2, body, stack, &3)
 
             {_clause_args, clause_context} =
@@ -370,10 +370,11 @@ defmodule Module.Types do
 
             clause_types = Pattern.of_domain(trees, stack, clause_context)
 
-            {_type_index, inferred} =
-              add_inferred(inferred, clause_types, return_type, index - 1, [])
+            {type_index, inferred} =
+              add_inferred(inferred, clause_types, return_type, total - 1, [])
 
-            {index + 1, [{0, index} | mapping], inferred}
+            total = if type_index == -1, do: total + 1, else: total
+            {index + 1, total, [{0, index} | mapping], inferred}
         end)
 
       domain =
