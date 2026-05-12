@@ -1217,8 +1217,8 @@ defmodule Kernel.ExpansionTest do
                 [
                   {:->, [line: 1],
                    [
-                     [{:capture, [capture: 1, line: 1], nil}],
-                     {:capture, [capture: 1, line: 1], nil}
+                     [{:"_&", [capture: 1, line: 1], :elixir_fn}],
+                     {:"_&", [capture: 1, line: 1], :elixir_fn}
                    ]}
                 ]}
     end

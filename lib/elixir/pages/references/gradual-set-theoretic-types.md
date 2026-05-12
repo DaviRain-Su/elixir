@@ -241,9 +241,9 @@ In the long term, Elixir developers who want static typing guarantees must expli
 
 Our goal with type inference is to avoid false positives: we will only emit typing violations if the code always fails. However, in some situations, Elixir may, on purpose, define a more strict type during inference, as to encourage certain idioms or to help spot bugs. Those cases are documented below.
 
-* Struct update syntax: when using the struct update syntax, `%User{user | name: "John Doe"}`, `user` must be guaranteed statically to be always be a `User` struct
+  * Struct update syntax: when using the struct update syntax, `%User{user | name: "John Doe"}`, `user` must be guaranteed statically to be always be a `User` struct
 
-* Single-clause anonymous functions: Elixir always considers the code inside anonynous functions to be executed. For example, in the snippet below
+  * Single-clause anonymous functions: Elixir always considers the code inside anonynous functions to be executed. For example, in the snippet below, even though the code will only fail at runtime if the anonymous function is later executed, Elixir will treat it as if the function is always executed. If the function has multiple clauses, then Elixir doesn't know which clause will be executed, and makes no assumption.
 
     ```elixir
     def example(x) do
@@ -251,8 +251,6 @@ Our goal with type inference is to avoid false positives: we will only emit typi
       {String.to_integer(x), fun}
     end
     ```
-
-  even though the code will only fail at runtime if the anonymous function is executed, Elixir will treat it as if the function is always executed. If the function has multiple clauses, then Elixir doesn't know which clause will be executed, and makes no assumption.
 
 ## Roadmap
 

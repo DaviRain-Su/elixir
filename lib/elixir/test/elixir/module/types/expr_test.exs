@@ -1318,12 +1318,6 @@ defmodule Module.Types.ExprTest do
 
                  dynamic()
 
-             where "capture" was given the type:
-
-                 # type: dynamic()
-                 # from: types_test.ex:LINE
-                 &1
-
              instead of using &1, you must define an anonymous function, define a variable and pattern match on "%Date{}"
              """
 
