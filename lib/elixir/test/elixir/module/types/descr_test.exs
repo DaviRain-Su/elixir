@@ -24,6 +24,18 @@ defmodule Module.Types.DescrTest do
   defp list(elem_type, tail_type), do: union(empty_list(), non_empty_list(elem_type, tail_type))
   defp map_with_default(descr), do: open_map([{to_domain_keys(:term), descr}])
 
+  defp projected_negative_map(size) do
+    Enum.reduce(1..size, open_map(k: open_map(), x: term()), fn index, acc ->
+      difference(
+        acc,
+        open_map([
+          {:k, open_map([{:"value#{index}", integer()}])},
+          {:"field#{index}", integer()}
+        ])
+      )
+    end)
+  end
+
   describe "union" do
     test "bitmap" do
       assert union(integer(), float()) == union(float(), integer())
@@ -2071,6 +2083,11 @@ defmodule Module.Types.DescrTest do
              |> map_fetch_key(:a) == {false, integer()}
     end
 
+    # Times out without a projection-only map_fetch_key path
+    test "map_fetch_key with projected negative maps" do
+      assert map_fetch_key(projected_negative_map(100), :k) == {false, open_map()}
+    end
+
     test "map_fetch_key with dynamic" do
       assert map_fetch_key(dynamic(), :a) == {true, dynamic()}
       assert map_fetch_key(union(dynamic(), integer()), :a) == :badmap
@@ -2224,6 +2241,55 @@ defmodule Module.Types.DescrTest do
       map = closed_map([{:a, atom([:a])}, {:__struct__, term()}, {domain_key(:atom), pid()}])
       {:ok, term} = map_get(map, atom() |> difference(atom([:a])))
       assert equal?(term, term())
+
+      base = open_map([{domain_key(:atom), term()}])
+      bad = open_map(a: if_set(negation(integer())))
+      map = negation(union(negation(base), bad))
+
+      assert equal?(map, open_map(a: integer()))
+
+      {:ok, type} = map_get(map, atom())
+      assert equal?(type, term())
+
+      {:ok, type} = map_get(map, atom([:a]))
+      assert equal?(type, integer())
+
+      map = closed_map([{:a, term()}, {domain_key(:atom), integer()}])
+
+      {:ok, type} = map_get(map, atom())
+      assert equal?(type, term())
+
+      {:ok, type} = map_get(map, atom([:a]))
+      assert equal?(type, term())
+
+      {:ok, type} = map_get(map, difference(atom(), atom([:a])))
+      assert equal?(type, integer())
+
+      map =
+        closed_map([{:a, term()}, {domain_key(:atom), integer()}])
+        |> difference(open_map(a: negation(pid())))
+
+      {:ok, type} = map_get(map, atom())
+      assert equal?(type, union(integer(), pid()))
+
+      {:ok, type} = map_get(map, atom([:a]))
+      assert equal?(type, pid())
+
+      {:ok, type} = map_get(map, difference(atom(), atom([:a])))
+      assert equal?(type, integer())
+
+      map =
+        closed_map([{:a, term()}, {:b, binary()}, {domain_key(:atom), integer()}])
+        |> difference(open_map(a: negation(pid())))
+
+      {:ok, type} = map_get(map, atom())
+      assert equal?(type, union(union(integer(), pid()), binary()))
+
+      {:ok, type} = map_get(map, atom([:a, :b]))
+      assert equal?(type, union(pid(), binary()))
+
+      {:ok, type} = map_get(map, difference(atom(), atom([:a, :b])))
+      assert equal?(type, integer())
     end
 
     test "with lists" do
@@ -2251,6 +2317,11 @@ defmodule Module.Types.DescrTest do
                {:ok, atom([:empty, :non_empty])}
 
       assert map_get(map, list(integer())) == {:ok, atom([:empty, :non_empty])}
+    end
+
+    # Times out without a projection-only map_get path
+    test "with projected negative maps" do
+      assert map_get(projected_negative_map(100), atom([:k])) == {:ok, open_map()}
     end
   end
 
@@ -2335,6 +2406,12 @@ defmodule Module.Types.DescrTest do
       assert open_map()
              |> difference(open_map(a: if_set(term()), c: if_set(term())))
              |> map_update(atom([:b]), integer(), true, true) == {none(), none(), []}
+    end
+
+    # Times out without a projection-aware map_update path
+    test "with projected negative maps" do
+      assert map_update(projected_negative_map(100), atom([:k]), binary()) ==
+               {open_map(), open_map(k: binary(), x: term()), []}
     end
 
     test "with non-empty open maps does not call the callback with none from absent branches" do
@@ -2801,6 +2878,31 @@ defmodule Module.Types.DescrTest do
                     key2: binary()
                   ])
                 )}
+    end
+
+    # Times out without proper map_put
+    test "with projected negative maps" do
+      map = projected_negative_map(100)
+
+      assert map_put(map, atom([:k]), binary()) == {:ok, open_map(k: binary(), x: term())}
+
+      map = difference(open_map(k: integer(), x: term()), open_map(k: integer(), a: integer()))
+
+      {:ok, type} = map_put(map, atom([:k]), binary())
+
+      assert equal?(
+               type,
+               difference(open_map(k: binary(), x: term()), open_map(k: binary(), a: integer()))
+             )
+    end
+
+    test "with projected negative maps and no popped value projection" do
+      # map_put/3 passes nil as the popped value accumulator because it only needs the map side.
+      map =
+        projected_negative_map(100)
+        |> difference(open_map(k: atom(), x: term()))
+
+      assert map_put(map, atom([:k]), binary()) == {:ok, open_map(k: binary(), x: term())}
     end
   end
 
