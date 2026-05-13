@@ -213,8 +213,8 @@ agents in Elixir spaces:
 
   * When it comes to discussions, using AI to help express yourself is welcome,
     but avoid directly copy and pasting AI generated content. If there is a language
-    barrier, use AI to translate or review your text, but do not use AI to respond
-    on your behalf.
+    barrier, use AI to translate, review, and improve your text, but do not use AI
+    to respond on your behalf.
 
   * Do not use coding agents to tackle existing issues unless they have the
     "Contributions Welcome" label.
