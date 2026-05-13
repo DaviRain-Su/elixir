@@ -601,7 +601,10 @@ defmodule Module.Types.MapTest do
   describe "Map.pop_lazy/3" do
     test "checking" do
       assert typecheck!(Map.pop_lazy(%{key: 123}, :key, fn -> :error end)) ==
-               dynamic(tuple([union(integer(), atom([:error])), empty_map()]))
+               union(
+                 tuple([integer(), empty_map()]),
+                 dynamic(tuple([union(integer(), atom([:error])), empty_map()]))
+               )
 
       assert typecheck!([x], Map.pop_lazy(x, :key, fn -> :error end)) ==
                dynamic(tuple([term(), open_map(key: not_set())]))
@@ -620,19 +623,21 @@ defmodule Module.Types.MapTest do
                  ])
                )
 
+      map = closed_map([{domain_key(:integer), atom([:before])}])
+
       assert typecheck!(
                [x],
                (
                  x = %{String.to_integer(x) => :before}
                  Map.pop_lazy(x, 123, fn -> :after end)
                )
-             ) ==
-               dynamic(
-                 tuple([
-                   atom([:before, :after]),
-                   closed_map([{domain_key(:integer), atom([:before])}])
-                 ])
+             )
+             |> equal?(
+               union(
+                 tuple([atom([:before]), map]),
+                 dynamic(tuple([atom([:before, :after]), map]))
                )
+             )
     end
 
     test "inference" do
