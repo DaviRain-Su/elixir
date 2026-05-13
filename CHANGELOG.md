@@ -175,6 +175,68 @@ The code above has a type violation, which is now caught by the type system:
 
 The type system was made possible thanks to a partnership between [CNRS](https://www.cnrs.fr/) and [Remote](https://remote.com/). The development work is currently sponsored by [Fresha](https://www.fresha.com/) and [Tidewave](https://tidewave.ai/).
 
+## v1.20.0-rc.5 (2026-05-13)
+
+This release requires Erlang/OTP 27+ and is compatible with Erlang/OTP 29.
+
+### 1. Enhancements
+
+#### EEx
+
+  * [EEx] Optimize compiler by flattening expr list only once
+
+#### Elixir
+
+  * [Base] Optimize Base validation functions by using SWAR techniques
+  * [Float] Optimize `Float.round/2` by avoiding big integers
+  * [Inspect] Increase inspect limit to help print deeply nested data structures
+  * [Inspect] Support printing Erlang records (using Erlang notation)
+  * [Kernel] Add occurrence typing on `case`, `cond`, and `with`
+  * [Registry] Switch `{:duplicate, :key}` key_ets to ordered_set with composite keys
+  * [String] SWAR-optimize ASCII fast paths in `String.length/1` and `String.slice/3`
+
+#### ExUnit
+
+  * [ExUnit] Show remaining runs when using `--repeat-until-failure`
+
+#### IEx
+
+  * [IEx.Helpers] Add `source/1`
+
+#### Mix
+
+  * [mix app.tree] Support `--output` option
+  * [mix deps.tree] Support `--output` option
+  * [mix help] Support printing docs for types and callbacks
+  * [mix format] Support `--no-compile` option
+  * [mix source] Add `mix source MODULE` to print or open a given module/function location
+
+### 2. Potential breaking changes
+
+#### Elixir
+
+  * [Kernel] Disallow raw CR line ending in strings, comments and after `?` for security reasons
+
+### 3. Bug fixes
+
+#### Elixir
+
+  * [Kernel] Fix a compiler crash when importing a module with `only: :sigils` option when the imported module exports non-sigil symbols with `sigil_` prefix
+  * [Kernel] Reject negative Duration in `to_timeout/1`
+  * [Macro] Fix generation of heredocs in `Macro.to_string/1` with escaped trailing newline
+  * [Path] Consistently return path as binary in `Path.relative_to_cwd/2`
+  * [Stream] Raise in `Stream.cycle/1` when enumerable reduce call yields no elements
+  * [String] Support empty pattern list in `String.count/2`
+
+#### Logger
+
+  * [Logger] Persist log level to app env in `Logger.configure/1`
+
+#### Mix
+
+  * [Mix] Use `non_executable_binary_to_term` on loopback pubsub
+  * [mix compile.elixir] Fix scenario where Elixir would tag mtimes in the future
+
 ## v1.20.0-rc.4 (2026-03-31)
 
 This release requires Erlang/OTP 27+ and is compatible with Erlang/OTP 29.
@@ -232,7 +294,7 @@ This release requires Erlang/OTP 27+ and is compatible with Erlang/OTP 29.
 #### Elixir
 
   * [Enum] Fix `Enum.slice/2` for ranges with step > 1 sliced by step > 1
-  * [File] Preserve directory permissions in `File.cp_r/3`
+  * [File] Allowing preserving directory permissions in `File.cp_r/3`
   * [File] Fix `File.cp_r/3` infinite loop with symlink cycles
   * [File] Fix `File.cp_r/3` infinite loop when copying into subdirectory of source
   * [File] Warn when defining `@type record()`, fixes CI on Erlang/OTP 29
@@ -261,13 +323,7 @@ This release requires Erlang/OTP 27+ and is compatible with Erlang/OTP 29.
   * [mix compile] Add `module_definition: :interpreted` option to `Code` which allows module definitions to be evaluated instead of compiled. In some applications/architectures, this can lead to drastic improvements to compilation times. Note this does not affect the generated `.beam` file, which will have the same performance/behaviour as before
   * [mix deps] Parallelize dep lock status checks during `deps.loadpaths`, improving boot times in projects with many git dependencies
 
-### 2. Potential breaking changes
-
-#### Elixir
-
-  * `map.foo()` (accessing a map field with parens) and `mod.foo` (invoking a function without parens) will now raise instead of emitting runtime warnings, aligning themselves with the type system behaviour
-
-### 3. Bug fixes
+### 2. Bug fixes
 
 #### IEx
 
@@ -318,7 +374,7 @@ This release requires Erlang/OTP 27+ and is compatible with Erlang/OTP 29.
 
 #### Elixir
 
-  * `require SomeModule` no longer expands to the given module at compile-time, but it still returns the module at runtime. Note that while Elixir does not guarantee macros will expand to certain constructs, but since this can break code relying on the previous behaviour, such as `require(SomeMod).some_macro()`, we are adding this note to the CHANGELOG
+  * `require SomeModule` no longer expands to the given module at compile-time, but it still returns the module at runtime. Note Elixir does not guarantee macros will expand to certain constructs, but since this can break code relying on the previous behaviour, such as `require(SomeMod).some_macro()`, we are adding this note to the CHANGELOG
 
 ### 3. Hard deprecations
 

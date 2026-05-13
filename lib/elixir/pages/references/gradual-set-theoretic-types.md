@@ -237,21 +237,6 @@ Type inference in Elixir is best-effort: it doesn't guarantee it will find all p
 
 In the long term, Elixir developers who want static typing guarantees must explicitly add type signatures to their functions (see "Roadmap"). Any function with an explicit type signature will be typed checked against the user-provided annotations, as in other statically typed languages.
 
-### False positives during inference
-
-Our goal with type inference is to avoid false positives: we will only emit typing violations if the code always fails. However, in some situations, Elixir may, on purpose, define a more strict type during inference, as to encourage certain idioms or to help spot bugs. Those cases are documented below.
-
-  * Struct update syntax: when using the struct update syntax, `%User{user | name: "John Doe"}`, `user` must be guaranteed statically to be always be a `User` struct
-
-  * Single-clause anonymous functions: Elixir always considers the code inside anonynous functions to be executed. For example, in the snippet below, even though the code will only fail at runtime if the anonymous function is later executed, Elixir will treat it as if the function is always executed. If the function has multiple clauses, then Elixir doesn't know which clause will be executed, and makes no assumption.
-
-    ```elixir
-    def example(x) do
-      fun = fn -> Integer.to_string(x) end
-      {String.to_integer(x), fun}
-    end
-    ```
-
 ## Roadmap
 
 At this moment, Elixir implements type inference of all language constructs. The goal is to assess performance and collect feedback on the quality of error messages, before introducing user facing types.
