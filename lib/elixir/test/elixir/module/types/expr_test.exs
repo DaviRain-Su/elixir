@@ -1971,7 +1971,7 @@ defmodule Module.Types.ExprTest do
                )
              ) == dynamic()
 
-      assert typedyn(
+      assert typedyn!(
                [x],
                (
                  case x do
