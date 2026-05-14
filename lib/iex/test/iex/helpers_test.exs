@@ -151,16 +151,23 @@ defmodule IEx.HelpersTest do
     @elixir_erl "elixir/src/elixir.erl"
     @lists_erl Application.app_dir(:stdlib, "src/lists.erl")
     @httpc_erl "src/http_client/httpc.erl"
-    @editor System.get_env("ELIXIR_EDITOR")
     @example_module_path "lib/iex/test/test_helper.exs"
 
     test "opens __FILE__ and __LINE__" do
-      System.put_env("ELIXIR_EDITOR", "echo __LINE__:__FILE__")
+      editor = System.get_env("ELIXIR_EDITOR")
 
-      assert capture_iex("open({#{inspect(__ENV__.file)}, 3})") |> maybe_trim_quotes() ==
-               "3:#{__ENV__.file}"
-    after
-      System.put_env("ELIXIR_EDITOR", @editor)
+      try do
+        System.put_env("ELIXIR_EDITOR", "echo __LINE__:__FILE__")
+
+        assert capture_iex("open({#{inspect(__ENV__.file)}, 3})") |> maybe_trim_quotes() ==
+                 "3:#{__ENV__.file}"
+      after
+        if editor do
+          System.put_env("ELIXIR_EDITOR", editor)
+        else
+          System.delete_env("ELIXIR_EDITOR")
+        end
+      end
     end
 
     test "opens Elixir module" do
