@@ -5942,6 +5942,20 @@ defmodule Module.Types.Descr do
     end)
   end
 
+  @doc """
+  Replace an element in the tuple at the given (0-based) index.
+
+  It returns the same as `tuple_fetch/2`.
+  """
+  def tuple_replace_at(descr, index, type) when is_integer(index) and index >= 0 do
+    case tuple_delete_at(descr, index) do
+      descr when is_descr(descr) -> tuple_insert_at(descr, index, type)
+      error -> error
+    end
+  end
+
+  def tuple_replace_at(_, _, _), do: :badindex
+
   defp tuple_of_size_at_least(n) when is_integer(n) and n >= 0 do
     %{tuple: tuple_new(:open, List.duplicate(term(), n))}
   end
