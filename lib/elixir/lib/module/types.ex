@@ -86,7 +86,7 @@ defmodule Module.Types do
           {_kind, inferred, context} = local_handler(meta, fun_arity, stack, context, finder)
 
           if infer_signatures? and kind == :def and fun_arity not in @no_infer do
-            {[{fun_arity, inferred} | types], private, context}
+            {[{fun_arity, group_clauses_by_return(inferred)} | types], private, context}
           else
             {types, private, context}
           end
@@ -513,6 +513,58 @@ defmodule Module.Types do
 
   defp add_inferred([], args, return, -1, acc),
     do: {-1, [{args, return} | Enum.reverse(acc)]}
+
+  # Compact clauses that have the same return and differ in exactly one
+  # argument by unioning that argument. For example:
+  #
+  #   (integer(), atom() -> boolean()) and (float(), atom() -> boolean())
+  #
+  # becomes:
+  #
+  #   (number(), atom() -> boolean())
+  #
+  # Arity-zero clauses have no argument position to widen.
+  defp group_clauses_by_return({:infer, domain, [{[_ | _], _} | _] = clauses}) do
+    clauses =
+      Enum.reduce(clauses, [], fn {args, return}, acc ->
+        group_clause_by_return(acc, args, return)
+      end)
+
+    {:infer, domain, clauses}
+  end
+
+  defp group_clauses_by_return(info), do: info
+
+  defp group_clause_by_return([{existing_args, return} | tail], args, return) do
+    case union_args(existing_args, args, [], false) do
+      nil ->
+        [{existing_args, return} | group_clause_by_return(tail, args, return)]
+
+      new_args ->
+        [{new_args, return} | tail]
+    end
+  end
+
+  defp group_clause_by_return([head | tail], args, return) do
+    [head | group_clause_by_return(tail, args, return)]
+  end
+
+  defp group_clause_by_return([], args, return), do: [{args, return}]
+
+  defp union_args([arg | existing], [arg | args], acc, changed?) do
+    union_args(existing, args, [arg | acc], changed?)
+  end
+
+  # Allow exactly one differing argument. That one position is widened
+  # with union/2. A second difference means the clauses must stay separate.
+  defp union_args([existing_arg | existing], [arg | args], acc, false) do
+    union_args(existing, args, [Descr.union(existing_arg, arg) | acc], true)
+  end
+
+  defp union_args([_ | _], [_ | _], _acc, true), do: nil
+
+  # In theory fully equal args are merged on add_inferred
+  defp union_args([], [], acc, _changed?), do: Enum.reverse(acc)
 
   defp with_file_meta(stack, meta) do
     case Keyword.fetch(meta, :file) do
