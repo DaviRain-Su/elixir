@@ -2689,6 +2689,17 @@ defmodule Module.Types.ExprTest do
 
              hint: when you rescue without specifying exception names, the variable is assigned a type of a struct but all of its fields are unknown. If you are trying to access an exception's :message key, either specify the exception names or use `Exception.message/1`.
              """
+
+      # Collect errors across clauses
+      assert {_, [_, _]} =
+               typediag!(
+                 try do
+                   raise "oops"
+                 rescue
+                   e in ArgumentError -> Integer.to_string(e)
+                   e in RuntimeError -> Integer.to_string(e)
+                 end
+               )
     end
 
     test "rescue: errors on undefined exceptions" do

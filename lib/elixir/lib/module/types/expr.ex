@@ -539,19 +539,22 @@ defmodule Module.Types.Expr do
       {type, context} =
         blocks
         |> Enum.reduce({type, Of.reset_vars(context, original)}, fn
-          {:rescue, clauses}, acc_context ->
+          {:rescue, clauses}, {_acc, %{failed: failed?}} = acc_context ->
             Enum.reduce(clauses, acc_context, fn
-              {:->, _, [[{:in, meta, [var, exceptions]} = expr], body]}, {acc, context} ->
-                {type, context} =
-                  of_rescue(var, exceptions, body, expr, expected, :rescue, meta, stack, context)
+              {:->, meta, [[head], body]}, {acc, context} ->
+                {failed?, context} = reset_failed(context, failed?)
 
-                {union(type, acc), context}
+                context =
+                  case head do
+                    {:in, meta, [var, mods]} ->
+                      of_rescue(var, mods, expr, :rescue, meta, stack, context)
 
-              {:->, meta, [[var], body]}, {acc, context} ->
-                {type, context} =
-                  of_rescue(var, [], body, var, expected, :anonymous_rescue, meta, stack, context)
+                    var ->
+                      of_rescue(var, [], var, :anonymous_rescue, meta, stack, context)
+                  end
 
-                {union(type, acc), context}
+                {type, context} = of_expr(body, expected, body, stack, context)
+                {union(type, acc), context |> set_failed(failed?) |> Of.reset_vars(original)}
             end)
 
           {:catch, clauses}, {acc, context} ->
@@ -760,11 +763,11 @@ defmodule Module.Types.Expr do
 
   ## Try
 
-  defp of_rescue(var, exceptions, body, expr, expected, info, meta, stack, original) do
+  defp of_rescue(var, exceptions, expr, info, meta, stack, context) do
     args = [__exception__: term()]
 
     {structs, context} =
-      Enum.map_reduce(exceptions, original, fn exception, context ->
+      Enum.map_reduce(exceptions, context, fn exception, context ->
         # Exceptions are not validated in the compiler,
         # to avoid export dependencies. So we do it here.
         {info, context} = Of.struct_info(exception, :expr, meta, stack, context)
@@ -776,21 +779,17 @@ defmodule Module.Types.Expr do
         end
       end)
 
-    context =
-      case var do
-        {:_, _, _} ->
-          context
+    case var do
+      {:_, _, _} ->
+        context
 
-        _ ->
-          expected = if structs == [], do: @exception, else: Enum.reduce(structs, &union/2)
-          expr = {:__block__, [type_check: info], [expr]}
-          context = Of.declare_var(var, context)
-          {_ok?, _type, context} = Of.refine_head_var(var, expected, expr, stack, context)
-          context
-      end
-
-    {type, context} = of_expr(body, expected, body, stack, context)
-    {type, Of.reset_vars(context, original)}
+      _ ->
+        expected = if structs == [], do: @exception, else: Enum.reduce(structs, &union/2)
+        expr = {:__block__, [type_check: info], [expr]}
+        context = Of.declare_var(var, context)
+        {_ok?, _type, context} = Of.refine_head_var(var, expected, expr, stack, context)
+        context
+    end
   end
 
   ## Comprehensions
